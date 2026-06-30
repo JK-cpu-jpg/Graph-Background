@@ -19,6 +19,7 @@ const DEFAULT_SETTINGS = {
 	imageUrl: '', // external URL, used when imageMode === 'url'
 	imageFit: 'cover', // 'cover' | 'contain' | 'repeat' | 'center'
 
+	opacity: 100, // 0-100, overall transparency of the background layer
 	dim: 0, // 0-100, darkens the background
 	blur: 0, // 0-20 (px), blurs the background only, never the graph itself
 };
@@ -69,6 +70,7 @@ module.exports = class GraphBackgroundPlugin extends Plugin {
 			backgroundSize: 'cover',
 			backgroundRepeat: 'no-repeat',
 			backgroundPosition: 'center',
+			opacity: (s.opacity ?? 100) / 100,
 			filter: 'none',
 		};
 
@@ -128,21 +130,18 @@ module.exports = class GraphBackgroundPlugin extends Plugin {
 		const containerSelectors = containerSelectorList.join(',\n');
 		const beforeSelectors = containerSelectorList.map((sel) => `${sel}::before`).join(',\n');
 
-		// This disables the canvas's own WebGL background fill (Obsidian's
-		// documented CSS-to-WebGL bridge) so our background can show through.
-		const fillSelectors = viewTypes
-			.map((t) => `.workspace-leaf-content[data-type="${t}"] .graph-view.color-fill`)
-			.join(',\n');
-
 		return `
 /* Graph Background plugin — generated styles */
 ${containerSelectors} {
 	position: relative;
+	z-index: 0;
 }
 ${beforeSelectors} {
 	content: "";
 	position: absolute;
 	inset: 0;
+	z-index: -1;
+	opacity: ${layer.opacity};
 	background-color: ${layer.backgroundColor};
 	background-image: ${layer.backgroundImage};
 	background-size: ${layer.backgroundSize};
@@ -150,9 +149,6 @@ ${beforeSelectors} {
 	background-position: ${layer.backgroundPosition};
 	filter: ${layer.filter};
 	pointer-events: none;
-}
-${fillSelectors} {
-	opacity: 0 !important;
 }
 `.trim();
 	}
@@ -413,9 +409,23 @@ class GraphBackgroundSettingTab extends PluginSettingTab {
 	renderOverlaySection(containerEl, s) {
 		containerEl.createEl('h3', { text: 'Readability overlay' });
 		containerEl.createEl('p', {
-			text: 'Dim or blur the background so node labels stay easy to read — this never affects the graph itself.',
+			text: 'Adjust opacity, dim, or blur the background so node labels stay easy to read — this never affects the graph itself.',
 			cls: 'setting-item-description',
 		});
+
+		new Setting(containerEl)
+			.setName('Opacity')
+			.setDesc(`${s.opacity ?? 100}%`)
+			.addSlider((slider) =>
+				slider
+					.setLimits(0, 100, 1)
+					.setValue(s.opacity ?? 100)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						s.opacity = value;
+						await this.commit();
+					})
+			);
 
 		new Setting(containerEl)
 			.setName('Dim')
